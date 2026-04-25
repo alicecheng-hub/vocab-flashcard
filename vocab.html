@@ -1,0 +1,936 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="單字卡">
+<title>單字閃卡</title>
+<link rel="manifest" href="manifest.json">
+<style>
+@import url('https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Sans:wght@300;400;500&display=swap');
+
+:root {
+  --bg: #0f0f0f;
+  --surface: #1a1a1a;
+  --surface2: #242424;
+  --border: rgba(255,255,255,0.08);
+  --text: #f0ece4;
+  --muted: rgba(240,236,228,0.45);
+  --hint: rgba(240,236,228,0.25);
+  --green: #7ec8a0;
+  --green-bg: rgba(126,200,160,0.12);
+  --red: #e07b6a;
+  --red-bg: rgba(224,123,106,0.12);
+  --gold: #d4a853;
+  --radius: 18px;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+
+body {
+  font-family: 'DM Sans', sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  user-select: none;
+  overflow-x: hidden;
+}
+
+/* grain overlay */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.04'/%3E%3C/svg%3E");
+  pointer-events: none;
+  z-index: 0;
+  opacity: 0.6;
+}
+
+.app { position: relative; z-index: 1; flex: 1; display: flex; flex-direction: column; max-width: 430px; margin: 0 auto; width: 100%; padding: 0 20px; }
+
+/* Header */
+header {
+  padding: 52px 0 24px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.title {
+  font-family: 'DM Serif Display', serif;
+  font-size: 22px;
+  letter-spacing: -0.3px;
+  color: var(--text);
+}
+.title span { color: var(--gold); font-style: italic; }
+
+.header-right { display: flex; align-items: center; gap: 12px; }
+
+.lang-tabs {
+  display: flex;
+  background: var(--surface);
+  border-radius: 100px;
+  padding: 3px;
+  border: 0.5px solid var(--border);
+}
+.lang-tab {
+  padding: 5px 14px;
+  border-radius: 100px;
+  font-size: 13px;
+  font-weight: 400;
+  color: var(--muted);
+  cursor: pointer;
+  transition: all .2s;
+  border: none;
+  background: none;
+}
+.lang-tab.active {
+  background: var(--surface2);
+  color: var(--text);
+  font-weight: 500;
+}
+
+.settings-btn {
+  width: 34px; height: 34px;
+  border-radius: 50%;
+  background: var(--surface);
+  border: 0.5px solid var(--border);
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer;
+  color: var(--muted);
+  font-size: 15px;
+}
+
+/* Stats row */
+.stats {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 24px;
+}
+.stat {
+  flex: 1;
+  background: var(--surface);
+  border: 0.5px solid var(--border);
+  border-radius: 12px;
+  padding: 10px 12px;
+  text-align: center;
+}
+.stat-n {
+  font-size: 20px;
+  font-weight: 500;
+  font-family: 'DM Serif Display', serif;
+}
+.stat-l {
+  font-size: 11px;
+  color: var(--muted);
+  margin-top: 2px;
+  letter-spacing: 0.3px;
+}
+.stat-n.green { color: var(--green); }
+.stat-n.red { color: var(--red); }
+.stat-n.gold { color: var(--gold); }
+
+/* Progress bar */
+.progress-wrap { margin-bottom: 28px; }
+.progress-bar {
+  height: 2px;
+  background: var(--border);
+  border-radius: 2px;
+  overflow: hidden;
+}
+.progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--gold), var(--green));
+  border-radius: 2px;
+  transition: width .4s ease;
+}
+.progress-label {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 6px;
+  font-size: 11px;
+  color: var(--hint);
+}
+
+/* Card */
+.card-scene { flex: 1; perspective: 1000px; margin-bottom: 20px; min-height: 260px; }
+.card-wrap {
+  width: 100%;
+  height: 100%;
+  min-height: 260px;
+  position: relative;
+  transform-style: preserve-3d;
+  transition: transform .5s cubic-bezier(.4,0,.2,1);
+  cursor: pointer;
+}
+.card-wrap.flipped { transform: rotateY(180deg); }
+
+.card-face {
+  position: absolute;
+  inset: 0;
+  border-radius: var(--radius);
+  border: 0.5px solid var(--border);
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 32px 24px;
+  gap: 10px;
+}
+.card-front { background: var(--surface); }
+.card-back {
+  background: var(--surface2);
+  transform: rotateY(180deg);
+}
+
+.card-lang-badge {
+  position: absolute;
+  top: 16px; left: 20px;
+  font-size: 10px;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  color: var(--hint);
+  font-weight: 500;
+}
+.card-num {
+  position: absolute;
+  top: 16px; right: 20px;
+  font-size: 11px;
+  color: var(--hint);
+}
+.card-tap-hint {
+  position: absolute;
+  bottom: 16px;
+  font-size: 11px;
+  color: var(--hint);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.card-sound-btn {
+  position: absolute;
+  bottom: 12px; right: 16px;
+  width: 32px; height: 32px;
+  border-radius: 50%;
+  background: var(--surface2);
+  border: 0.5px solid var(--border);
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer;
+  font-size: 14px;
+  transition: background .15s;
+}
+.card-sound-btn:active { background: var(--surface); }
+
+.word-en {
+  font-family: 'DM Serif Display', serif;
+  font-size: 36px;
+  letter-spacing: -0.5px;
+  color: var(--text);
+  text-align: center;
+  line-height: 1.1;
+}
+.word-jp {
+  font-size: 34px;
+  font-weight: 300;
+  color: var(--text);
+  text-align: center;
+}
+.word-reading {
+  font-size: 15px;
+  color: var(--muted);
+  text-align: center;
+}
+.word-sub {
+  font-size: 13px;
+  color: var(--hint);
+  text-align: center;
+}
+
+.back-meanings {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: 100%;
+}
+.meaning-row {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding: 10px 14px;
+  background: var(--bg);
+  border-radius: 10px;
+  border: 0.5px solid var(--border);
+}
+.meaning-label {
+  font-size: 10px;
+  letter-spacing: 1.2px;
+  text-transform: uppercase;
+  color: var(--hint);
+  min-width: 20px;
+  font-weight: 500;
+}
+.meaning-text {
+  font-size: 16px;
+  color: var(--text);
+  font-weight: 400;
+}
+.meaning-text.serif { font-family: 'DM Serif Display', serif; font-size: 18px; }
+.back-example-wrap {
+  width: 100%;
+  background: rgba(212,168,83,0.08);
+  border: 0.5px solid rgba(212,168,83,0.35);
+  border-radius: 10px;
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.back-example-label {
+  font-size: 10px;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  color: var(--gold);
+  font-weight: 500;
+}
+.back-example {
+  font-size: 16px;
+  color: var(--gold);
+  text-align: left;
+  line-height: 1.7;
+  font-style: italic;
+}
+.back-example-zh {
+  font-size: 14px;
+  color: var(--text);
+  text-align: left;
+  line-height: 1.6;
+  opacity: 0.75;
+}
+
+/* Buttons */
+.action-row {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 20px;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity .3s;
+  transform: translateY(8px);
+}
+.action-row.visible {
+  opacity: 1;
+  pointer-events: all;
+  transform: translateY(0);
+  transition: opacity .3s, transform .3s;
+}
+
+.btn {
+  flex: 1;
+  padding: 14px 0;
+  border-radius: 14px;
+  font-size: 14px;
+  font-weight: 500;
+  font-family: 'DM Sans', sans-serif;
+  cursor: pointer;
+  border: 0.5px solid;
+  transition: all .15s;
+  letter-spacing: 0.2px;
+}
+.btn:active { transform: scale(0.97); }
+.btn-again {
+  background: var(--red-bg);
+  border-color: var(--red);
+  color: var(--red);
+}
+.btn-know {
+  background: var(--green-bg);
+  border-color: var(--green);
+  color: var(--green);
+}
+
+/* Done screen */
+.done-screen {
+  display: none;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  flex: 1;
+  text-align: center;
+  gap: 16px;
+  padding: 40px 0;
+}
+.done-screen.show { display: flex; }
+.done-icon { font-size: 48px; margin-bottom: 8px; }
+.done-title {
+  font-family: 'DM Serif Display', serif;
+  font-size: 28px;
+  letter-spacing: -0.5px;
+}
+.done-sub { font-size: 14px; color: var(--muted); line-height: 1.6; }
+.done-btns { display: flex; flex-direction: column; gap: 10px; width: 100%; margin-top: 12px; }
+.btn-outline {
+  padding: 14px;
+  border-radius: 14px;
+  font-size: 14px;
+  font-weight: 500;
+  font-family: 'DM Sans', sans-serif;
+  cursor: pointer;
+  border: 0.5px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  transition: all .15s;
+  text-align: center;
+}
+.btn-outline:active { transform: scale(0.98); background: var(--surface2); }
+.btn-gold {
+  background: rgba(212,168,83,0.12);
+  border-color: var(--gold);
+  color: var(--gold);
+}
+
+/* Main area toggle */
+.main-area { display: flex; flex-direction: column; flex: 1; }
+.main-area.hidden { display: none; }
+
+/* Toast */
+.toast {
+  position: fixed;
+  bottom: 40px;
+  left: 50%;
+  transform: translateX(-50%) translateY(20px);
+  background: var(--surface2);
+  border: 0.5px solid var(--border);
+  padding: 10px 20px;
+  border-radius: 100px;
+  font-size: 13px;
+  color: var(--text);
+  opacity: 0;
+  transition: all .3s;
+  z-index: 999;
+  white-space: nowrap;
+}
+.toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <div class="title">單字<span>閃卡</span></div>
+    <div class="header-right">
+      <div class="lang-tabs">
+        <button class="lang-tab active" onclick="setLang('en')">英文</button>
+        <button class="lang-tab" onclick="setLang('jp')">日文</button>
+      </div>
+    </div>
+  </header>
+
+  <div class="stats">
+    <div class="stat">
+      <div class="stat-n gold" id="stat-total">0</div>
+      <div class="stat-l">總單字</div>
+    </div>
+    <div class="stat">
+      <div class="stat-n green" id="stat-known">0</div>
+      <div class="stat-l">已掌握</div>
+    </div>
+    <div class="stat">
+      <div class="stat-n red" id="stat-left">0</div>
+      <div class="stat-l">待學習</div>
+    </div>
+  </div>
+
+  <div class="progress-wrap">
+    <div class="progress-bar"><div class="progress-fill" id="prog-fill"></div></div>
+    <div class="progress-label">
+      <span id="prog-batch">批次 1</span>
+      <span id="prog-count">0 / 0</span>
+    </div>
+  </div>
+
+  <div class="main-area" id="main-area">
+    <div class="card-scene">
+      <div class="card-wrap" id="card" onclick="flipCard()">
+        <div class="card-face card-front" id="front">
+          <div class="card-lang-badge" id="lang-badge">EN</div>
+          <div class="card-num" id="card-num">1</div>
+          <div class="word-en" id="front-word">—</div>
+          <div class="word-reading" id="front-reading" style="display:none"></div>
+          <div class="word-sub" id="front-sub"></div>
+          <div class="card-tap-hint">點擊翻面</div>
+          <div class="card-sound-btn" id="sound-front" onclick="event.stopPropagation();speak('front')">🔊</div>
+        </div>
+        <div class="card-face card-back" id="back">
+          <div class="card-lang-badge" id="lang-badge-back">EN</div>
+          <div class="back-meanings" id="back-meanings"></div>
+          <div class="back-example-wrap" id="back-example-wrap">
+            <div class="back-example-label">例句</div>
+            <div class="back-example" id="back-example"></div>
+            <div class="back-example-zh" id="back-example-zh"></div>
+          </div>
+          <div class="card-sound-btn" id="sound-back" onclick="event.stopPropagation();speak('back')">🔊</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="action-row" id="action-row">
+      <button class="btn btn-again" onclick="rate(false)">再複習</button>
+      <button class="btn btn-know" onclick="rate(true)">認識了 ✓</button>
+    </div>
+  </div>
+
+  <div class="done-screen" id="done-screen">
+    <div class="done-icon">✦</div>
+    <div class="done-title" id="done-title">批次完成！</div>
+    <div class="done-sub" id="done-sub"></div>
+    <div class="done-btns">
+      <button class="btn-outline btn-gold" id="next-batch-btn" onclick="nextBatch()">下一批單字 →</button>
+      <button class="btn-outline" onclick="reviewAgain()">再練習一次不熟的</button>
+      <button class="btn-outline" onclick="resetAll()">重置所有進度</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const WORDS = {
+  en: [
+    {en:"ambiguous",jp:"曖昧な",zh:"模稜兩可的",r:"",ex:"The instructions were ambiguous.",exzh:"那份說明很不清楚。"},
+    {en:"diligent",jp:"勤勉な",zh:"勤奮的",r:"",ex:"She is a diligent student.",exzh:"她是個勤奮的學生。"},
+    {en:"obstacle",jp:"障害",zh:"障礙",r:"しょうがい",ex:"Fear is the biggest obstacle.",exzh:"恐懼是最大的障礙。"},
+    {en:"inevitable",jp:"避けられない",zh:"不可避免的",r:"",ex:"Change is inevitable.",exzh:"改變是不可避免的。"},
+    {en:"acknowledge",jp:"認める",zh:"承認",r:"みとめる",ex:"She acknowledged the mistake.",exzh:"她承認了那個錯誤。"},
+    {en:"consequence",jp:"結果",zh:"後果",r:"けっか",ex:"Think of the consequences.",exzh:"想想後果吧。"},
+    {en:"efficient",jp:"効率的な",zh:"有效率的",r:"",ex:"This method is more efficient.",exzh:"這個方法更有效率。"},
+    {en:"vulnerable",jp:"傷つきやすい",zh:"脆弱的",r:"",ex:"Children are vulnerable.",exzh:"孩子們容易受傷。"},
+    {en:"circumstances",jp:"状況",zh:"情況",r:"じょうきょう",ex:"It depends on circumstances.",exzh:"視情況而定。"},
+    {en:"profound",jp:"深い",zh:"深刻的、深厚的",r:"ふかい",ex:"A profound impact on society.",exzh:"對社會產生了深遠的影響。"},
+    {en:"reluctant",jp:"気が進まない",zh:"不情願的",r:"",ex:"He was reluctant to leave.",exzh:"他不情願地離開了。"},
+    {en:"coincidence",jp:"偶然",zh:"巧合",r:"ぐうぜん",ex:"What a strange coincidence!",exzh:"真是奇妙的巧合！"},
+    {en:"persevere",jp:"忍耐する",zh:"堅持不懈",r:"にんたいする",ex:"You must persevere through hardship.",exzh:"你必須在困境中堅持下去。"},
+    {en:"negotiate",jp:"交渉する",zh:"談判、協商",r:"こうしょうする",ex:"They negotiated a new deal.",exzh:"他們談成了一筆新交易。"},
+    {en:"substantial",jp:"かなりの",zh:"相當大的、實質的",r:"",ex:"A substantial amount of money.",exzh:"一筆相當大的金額。"},
+    {en:"perceive",jp:"認識する",zh:"感知、察覺",r:"にんしきする",ex:"How do you perceive the situation?",exzh:"你如何看待這個情況？"},
+    {en:"enhance",jp:"高める",zh:"提升、增強",r:"たかめる",ex:"This will enhance your skills.",exzh:"這會提升你的技能。"},
+    {en:"elaborate",jp:"詳しく説明する",zh:"詳細說明",r:"くわしくせつめいする",ex:"Could you elaborate on that?",exzh:"你能詳細說明一下嗎？"},
+    {en:"anticipate",jp:"予想する",zh:"預期、期待",r:"よそうする",ex:"We didn't anticipate this problem.",exzh:"我們沒有預料到這個問題。"},
+    {en:"suppress",jp:"抑える",zh:"壓制、抑制",r:"おさえる",ex:"Try to suppress your anger.",exzh:"試著壓制你的憤怒。"},
+    {en:"notorious",jp:"悪名高い",zh:"惡名昭彰的",r:"あくめいたかい",ex:"He is notorious for lying.",exzh:"他以說謊聞名。"},
+    {en:"transparent",jp:"透明な",zh:"透明的",r:"とうめいな",ex:"The process should be transparent.",exzh:"這個過程應該透明公開。"},
+    {en:"controversial",jp:"議論を呼ぶ",zh:"有爭議的",r:"ぎろんをよぶ",ex:"A controversial decision.",exzh:"一個有爭議的決定。"},
+    {en:"sustain",jp:"維持する",zh:"維持、支撐",r:"いじする",ex:"Can you sustain this pace?",exzh:"你能維持這個速度嗎？"},
+    {en:"privilege",jp:"特権",zh:"特權",r:"とっけん",ex:"Education is a privilege.",exzh:"教育是一種特權。"},
+    {en:"contradict",jp:"矛盾する",zh:"矛盾、反駁",r:"むじゅんする",ex:"That contradicts what you said.",exzh:"那和你說的話矛盾。"},
+    {en:"persist",jp:"持続する",zh:"持續、堅持",r:"じぞくする",ex:"The problem persists.",exzh:"問題依然存在。"},
+    {en:"dedicate",jp:"捧げる",zh:"奉獻、致力於",r:"ささげる",ex:"She dedicated her life to art.",exzh:"她將一生奉獻給藝術。"},
+    {en:"accumulate",jp:"蓄積する",zh:"積累",r:"ちくせきする",ex:"Debt can accumulate quickly.",exzh:"債務可以很快累積。"},
+    {en:"adequate",jp:"十分な",zh:"足夠的",r:"じゅうぶんな",ex:"The salary is adequate.",exzh:"這薪水算夠用。"},
+    {en:"conscious",jp:"意識している",zh:"有意識的",r:"いしきしている",ex:"Be conscious of your habits.",exzh:"要意識到自己的習慣。"},
+    {en:"moderate",jp:"適度な",zh:"適度的",r:"てきどな",ex:"Exercise in moderate amounts.",exzh:"適量運動。"},
+    {en:"demonstrate",jp:"示す",zh:"示範、展示",r:"しめす",ex:"Let me demonstrate the method.",exzh:"讓我示範這個方法。"},
+    {en:"interpret",jp:"解釈する",zh:"解釋、詮釋",r:"かいしゃくする",ex:"How do you interpret this poem?",exzh:"你如何詮釋這首詩？"},
+    {en:"frustration",jp:"欲求不満",zh:"挫折感",r:"よっきゅうふまん",ex:"I felt deep frustration.",exzh:"我感到深深的挫折。"},
+    {en:"skeptical",jp:"懐疑的な",zh:"懷疑的",r:"かいぎてきな",ex:"I'm skeptical about his claims.",exzh:"我對他的說法抱持懷疑。"},
+    {en:"initiative",jp:"主導権",zh:"主動性、倡議",r:"しゅどうけん",ex:"Take the initiative.",exzh:"主動出擊吧。"},
+    {en:"tedious",jp:"退屈な",zh:"乏味的、冗長的",r:"たいくつな",ex:"The task was tedious.",exzh:"這個任務很無聊。"},
+    {en:"momentum",jp:"勢い",zh:"動力、勢頭",r:"いきおい",ex:"We need to keep the momentum.",exzh:"我們需要保持這股勢頭。"},
+    {en:"relevant",jp:"関連のある",zh:"相關的",r:"かんれんのある",ex:"Is that relevant to the topic?",exzh:"那跟主題有關嗎？"},
+    {en:"exceed",jp:"超える",zh:"超過",r:"こえる",ex:"Sales exceeded our target.",exzh:"銷售額超過了我們的目標。"},
+    {en:"fundamental",jp:"根本的な",zh:"根本的、基礎的",r:"こんぽんてきな",ex:"This is a fundamental problem.",exzh:"這是個根本性的問題。"},
+    {en:"assumption",jp:"仮定",zh:"假設",r:"かてい",ex:"Don't make assumptions.",exzh:"不要亂做假設。"},
+    {en:"reveal",jp:"明らかにする",zh:"揭露、顯示",r:"あきらかにする",ex:"The report revealed the truth.",exzh:"報告揭露了真相。"},
+    {en:"abandon",jp:"放棄する",zh:"放棄",r:"ほうきする",ex:"Don't abandon your dreams.",exzh:"不要放棄你的夢想。"},
+    {en:"consistent",jp:"一貫した",zh:"一致的",r:"いっかんした",ex:"Be consistent in your efforts.",exzh:"努力要持之以恆。"},
+    {en:"confront",jp:"直面する",zh:"面對、對抗",r:"ちょくめんする",ex:"Confront your fears.",exzh:"直面你的恐懼。"},
+    {en:"vivid",jp:"鮮明な",zh:"生動的",r:"せんめいな",ex:"A vivid memory of that day.",exzh:"那天的記憶很鮮明。"},
+    {en:"ironic",jp:"皮肉な",zh:"諷刺的",r:"ひにくな",ex:"How ironic that he won.",exzh:"他竟然贏了，真是諷刺。"},
+    {en:"cautious",jp:"慎重な",zh:"謹慎的",r:"しんちょうな",ex:"Be cautious when investing.",exzh:"投資時要謹慎。"},
+    {en:"rational",jp:"合理的な",zh:"理性的",r:"ごうりてきな",ex:"Think in a rational way.",exzh:"要理性地思考。"},
+    {en:"collapse",jp:"崩壊する",zh:"崩潰、倒塌",r:"ほうかいする",ex:"The building collapsed.",exzh:"那棟建築倒塌了。"},
+    {en:"undermine",jp:"弱体化する",zh:"削弱、破壞",r:"じゃくたいかする",ex:"Don't undermine his confidence.",exzh:"不要打擊他的自信。"},
+    {en:"ethical",jp:"倫理的な",zh:"道德的",r:"りんりてきな",ex:"Is this ethical behavior?",exzh:"這個行為合乎道德嗎？"},
+    {en:"pursue",jp:"追求する",zh:"追求",r:"ついきゅうする",ex:"Pursue your passion.",exzh:"去追求你的熱情所在。"},
+    {en:"distract",jp:"気を散らす",zh:"使分心",r:"きをちらす",ex:"Don't distract me please.",exzh:"請不要讓我分心。"},
+    {en:"eliminate",jp:"排除する",zh:"消除、淘汰",r:"はいじょする",ex:"We need to eliminate waste.",exzh:"我們需要消除浪費。"},
+    {en:"crucial",jp:"重大な",zh:"至關重要的",r:"じゅうだいな",ex:"This is a crucial moment.",exzh:"這是關鍵時刻。"},
+    {en:"mutual",jp:"相互の",zh:"相互的",r:"そうごの",ex:"Mutual respect is important.",exzh:"相互尊重很重要。"},
+    {en:"cope",jp:"対処する",zh:"應對、應付",r:"たいしょする",ex:"How do you cope with stress?",exzh:"你如何應對壓力？"},
+    {en:"diverse",jp:"多様な",zh:"多元的",r:"たような",ex:"A diverse group of people.",exzh:"一群多元背景的人。"},
+    {en:"obstacle",jp:"障害",zh:"障礙",r:"しょうがい",ex:"Overcome every obstacle.",exzh:""},
+    {en:"assert",jp:"主張する",zh:"主張、聲稱",r:"しゅちょうする",ex:"She asserted her innocence.",exzh:""},
+    {en:"tedious",jp:"退屈な",zh:"無聊的",r:"たいくつな",ex:"Long meetings can be tedious.",exzh:""},
+    {en:"fluctuate",jp:"変動する",zh:"波動、起伏",r:"へんどうする",ex:"Prices fluctuate daily.",exzh:""},
+    {en:"inherit",jp:"受け継ぐ",zh:"繼承",r:"うけつぐ",ex:"She inherited her mother's talent.",exzh:""},
+    {en:"convince",jp:"納得させる",zh:"說服",r:"なっとくさせる",ex:"I can't convince him.",exzh:""},
+    {en:"distinguish",jp:"区別する",zh:"區分、辨別",r:"くべつする",ex:"Can you distinguish them?",exzh:""},
+    {en:"tolerate",jp:"我慢する",zh:"忍受、容忍",r:"がまんする",ex:"I can't tolerate rudeness.",exzh:""},
+    {en:"inevitable",jp:"避けられない",zh:"不可避免的",r:"",ex:"Mistakes are inevitable.",exzh:""},
+    {en:"compromise",jp:"妥協する",zh:"妥協",r:"だきょうする",ex:"Both sides must compromise.",exzh:""},
+    {en:"optimistic",jp:"楽観的な",zh:"樂觀的",r:"らっかんてきな",ex:"Stay optimistic about the future.",exzh:""},
+    {en:"pessimistic",jp:"悲観的な",zh:"悲觀的",r:"ひかんてきな",ex:"Don't be so pessimistic.",exzh:""},
+    {en:"spontaneous",jp:"自発的な",zh:"自發的",r:"じはつてきな",ex:"A spontaneous trip to Japan.",exzh:""},
+    {en:"elaborate",jp:"詳細な",zh:"詳細的",r:"しょうさいな",ex:"An elaborate plan.",exzh:""},
+    {en:"isolated",jp:"孤立した",zh:"孤立的",r:"こりつした",ex:"She felt isolated at school.",exzh:""},
+    {en:"transition",jp:"移行",zh:"過渡、轉變",r:"いこう",ex:"A smooth transition of power.",exzh:""},
+    {en:"regardless",jp:"にもかかわらず",zh:"不管、不論",r:"にもかかわらず",ex:"Proceed regardless of the cost.",exzh:""},
+    {en:"inherit",jp:"相続する",zh:"繼承",r:"そうぞくする",ex:"He inherited the business.",exzh:""},
+    {en:"imply",jp:"暗示する",zh:"暗示",r:"あんじする",ex:"What does this imply?",exzh:""},
+    {en:"perspective",jp:"視点",zh:"視角、觀點",r:"してん",ex:"From her perspective, it was fair.",exzh:""},
+    {en:"clarify",jp:"明確にする",zh:"澄清",r:"めいかくにする",ex:"Can you clarify your point?",exzh:""},
+    {en:"tendency",jp:"傾向",zh:"傾向",r:"けいこう",ex:"She has a tendency to overthink.",exzh:""},
+    {en:"privilege",jp:"特権",zh:"特權",r:"とっけん",ex:"Not everyone has this privilege.",exzh:""},
+    {en:"flexible",jp:"柔軟な",zh:"靈活的",r:"じゅうなんな",ex:"Be flexible with your plans.",exzh:""},
+    {en:"accurate",jp:"正確な",zh:"準確的",r:"せいかくな",ex:"The data is accurate.",exzh:""},
+    {en:"genuine",jp:"本物の",zh:"真誠的、真實的",r:"ほんものの",ex:"A genuine smile.",exzh:""},
+    {en:"neglect",jp:"怠る",zh:"忽視、疏忽",r:"おこたる",ex:"Don't neglect your health.",exzh:""},
+    {en:"motivate",jp:"動機付ける",zh:"激勵",r:"どうきづける",ex:"What motivates you?",exzh:""},
+    {en:"overcome",jp:"克服する",zh:"克服",r:"こくふくする",ex:"Overcome your weaknesses.",exzh:""},
+    {en:"dispute",jp:"争い",zh:"爭議",r:"あらそい",ex:"A legal dispute.",exzh:""},
+    {en:"coincide",jp:"一致する",zh:"同時發生、一致",r:"いっちする",ex:"Our ideas coincide.",exzh:""},
+    {en:"extent",jp:"程度",zh:"程度、範圍",r:"ていど",ex:"To some extent, you're right.",exzh:""},
+    {en:"imitate",jp:"真似する",zh:"模仿",r:"まねする",ex:"Children imitate adults.",exzh:""},
+    {en:"influence",jp:"影響",zh:"影響",r:"えいきょう",ex:"Music has a big influence.",exzh:""},
+    {en:"aggressive",jp:"積極的な",zh:"積極的、侵略性的",r:"せっきょくてきな",ex:"An aggressive marketing strategy.",exzh:""},
+    {en:"hesitate",jp:"ためらう",zh:"猶豫",r:"ためらう",ex:"Don't hesitate to ask.",exzh:""},
+    {en:"empathy",jp:"共感",zh:"同理心",r:"きょうかん",ex:"Show empathy to others.",exzh:""},
+    {en:"frustrate",jp:"欲求不満にさせる",zh:"使沮喪",r:"よっきゅうふまんにさせる",ex:"This situation frustrates me.",exzh:""},
+  ],
+  jp: [
+    {en:"complex/complicated",jp:"複雑",zh:"複雜",r:"ふくざつ",ex:"この問題は複雑だ。",exzh:"這個問題很複雜。"},
+    {en:"influence/effect",jp:"影響",zh:"影響",r:"えいきょう",ex:"環境が健康に影響する。",exzh:"環境影響健康。"},
+    {en:"judgment/decision",jp:"判断",zh:"判斷",r:"はんだん",ex:"正しい判断をする。",exzh:"做出正確的判斷。"},
+    {en:"investigation/research",jp:"調査",zh:"調查",r:"ちょうさ",ex:"市場調査を行う。",exzh:"進行市場調查。"},
+    {en:"policy/measure",jp:"対策",zh:"對策、措施",r:"たいさく",ex:"対策を立てる。",exzh:"擬定對策。"},
+    {en:"responsibility",jp:"責任",zh:"責任",r:"せきにん",ex:"責任を取る。",exzh:"承擔責任。"},
+    {en:"environment",jp:"環境",zh:"環境",r:"かんきょう",ex:"環境問題が深刻だ。",exzh:"環境問題很嚴重。"},
+    {en:"cooperation",jp:"協力",zh:"合作",r:"きょうりょく",ex:"みんなの協力が必要だ。",exzh:"需要大家的合作。"},
+    {en:"competition",jp:"競争",zh:"競爭",r:"きょうそう",ex:"激しい競争が続く。",exzh:"激烈的競爭持續著。"},
+    {en:"achievement",jp:"達成",zh:"達成、完成",r:"たっせい",ex:"目標を達成する。",exzh:"達成目標。"},
+    {en:"evaluation/assessment",jp:"評価",zh:"評價",r:"ひょうか",ex:"仕事の評価が上がった。",exzh:"工作評價提升了。"},
+    {en:"proposal/suggestion",jp:"提案",zh:"提案",r:"ていあん",ex:"新しい提案をする。",exzh:"提出新的提案。"},
+    {en:"negotiation",jp:"交渉",zh:"談判",r:"こうしょう",ex:"価格交渉をする。",exzh:"進行價格談判。"},
+    {en:"conflict/dispute",jp:"対立",zh:"對立",r:"たいりつ",ex:"意見の対立が起きた。",exzh:"發生了意見對立。"},
+    {en:"solution",jp:"解決策",zh:"解決方案",r:"かいけつさく",ex:"解決策を考える。",exzh:"思考解決方案。"},
+    {en:"awareness/consciousness",jp:"意識",zh:"意識",r:"いしき",ex:"環境意識を高める。",exzh:"提高環保意識。"},
+    {en:"situation/circumstances",jp:"状況",zh:"狀況",r:"じょうきょう",ex:"状況を把握する。",exzh:"掌握狀況。"},
+    {en:"standard/level",jp:"水準",zh:"水準",r:"すいじゅん",ex:"生活水準が上がった。",exzh:"生活水準提升了。"},
+    {en:"perspective/viewpoint",jp:"観点",zh:"觀點",r:"かんてん",ex:"別の観点から考える。",exzh:"從不同角度思考。"},
+    {en:"necessity",jp:"必要性",zh:"必要性",r:"ひつようせい",ex:"改革の必要性を感じる。",exzh:"感受到改革的必要性。"},
+    {en:"priority",jp:"優先",zh:"優先",r:"ゆうせん",ex:"健康を優先する。",exzh:"以健康為優先。"},
+    {en:"efficiency",jp:"効率",zh:"效率",r:"こうりつ",ex:"効率よく働く。",exzh:"有效率地工作。"},
+    {en:"limit/boundary",jp:"限界",zh:"極限",r:"げんかい",ex:"自分の限界を知る。",exzh:"了解自己的極限。"},
+    {en:"possibility",jp:"可能性",zh:"可能性",r:"かのうせい",ex:"成功の可能性がある。",exzh:"有成功的可能性。"},
+    {en:"phenomenon",jp:"現象",zh:"現象",r:"げんしょう",ex:"不思議な現象が起きた。",exzh:"發生了奇妙的現象。"},
+    {en:"principle/rule",jp:"原則",zh:"原則",r:"げんそく",ex:"原則を守る。",exzh:"遵守原則。"},
+    {en:"tendency/trend",jp:"傾向",zh:"傾向",r:"けいこう",ex:"増加の傾向がある。",exzh:"有增加的趨勢。"},
+    {en:"reform/improvement",jp:"改善",zh:"改善",r:"かいぜん",ex:"業務を改善する。",exzh:"改善業務流程。"},
+    {en:"expansion",jp:"拡大",zh:"擴大",r:"かくだい",ex:"事業を拡大する。",exzh:"擴大事業規模。"},
+    {en:"reduction/decrease",jp:"削減",zh:"削減",r:"さくげん",ex:"コストを削減する。",exzh:"削減成本。"},
+    {en:"transition/shift",jp:"移行",zh:"移行",r:"いこう",ex:"新しいシステムに移行する。",exzh:"移轉到新系統。"},
+    {en:"promotion/encouragement",jp:"促進",zh:"促進",r:"そくしん",ex:"健康促進に取り組む。",exzh:"致力於健康促進。"},
+    {en:"maintenance/preservation",jp:"維持",zh:"維持",r:"いじ",ex:"現状を維持する。",exzh:"維持現狀。"},
+    {en:"guarantee/assurance",jp:"保証",zh:"保證",r:"ほしょう",ex:"品質を保証する。",exzh:"保證品質。"},
+    {en:"participation",jp:"参加",zh:"參加",r:"さんか",ex:"会議に参加する。",exzh:"參加會議。"},
+    {en:"support/backing",jp:"支援",zh:"支援",r:"しえん",ex:"被災地を支援する。",exzh:"支援災區。"},
+    {en:"prevention",jp:"防止",zh:"防止",r:"ぼうし",ex:"事故を防止する。",exzh:"防止事故發生。"},
+    {en:"announcement/notification",jp:"通知",zh:"通知",r:"つうち",ex:"結果を通知する。",exzh:"通知結果。"},
+    {en:"confirmation/check",jp:"確認",zh:"確認",r:"かくにん",ex:"内容を確認する。",exzh:"確認內容。"},
+    {en:"consideration/review",jp:"検討",zh:"檢討",r:"けんとう",ex:"計画を検討する。",exzh:"檢討計畫。"},
+    {en:"expression/representation",jp:"表現",zh:"表現",r:"ひょうげん",ex:"気持ちを表現する。",exzh:"表達心情。"},
+    {en:"recognition/understanding",jp:"認識",zh:"認識",r:"にんしき",ex:"問題を認識する。",exzh:"認識到問題所在。"},
+    {en:"establishment/founding",jp:"設立",zh:"設立",r:"せつりつ",ex:"会社を設立する。",exzh:"設立公司。"},
+    {en:"operation/management",jp:"運営",zh:"營運",r:"うんえい",ex:"団体を運営する。",exzh:"營運團體。"},
+    {en:"selection/choice",jp:"選択",zh:"選擇",r:"せんたく",ex:"正しい選択をする。",exzh:"做出正確的選擇。"},
+    {en:"appeal/claim",jp:"主張",zh:"主張",r:"しゅちょう",ex:"自分の意見を主張する。",exzh:"主張自己的意見。"},
+    {en:"assumption/hypothesis",jp:"仮定",zh:"假設",r:"かてい",ex:"仮定の話をする。",exzh:"談論假設性的話題。"},
+    {en:"comparison",jp:"比較",zh:"比較",r:"ひかく",ex:"二つを比較する。",exzh:"比較兩者。"},
+    {en:"analysis",jp:"分析",zh:"分析",r:"ぶんせき",ex:"データを分析する。",exzh:"分析數據。"},
+    {en:"contradiction",jp:"矛盾",zh:"矛盾",r:"むじゅん",ex:"矛盾した発言をする。",exzh:"說出自相矛盾的話。"},
+    {en:"limitation/restriction",jp:"制限",zh:"限制",r:"せいげん",ex:"時間の制限がある。",exzh:"有時間限制。"},
+    {en:"obligation/duty",jp:"義務",zh:"義務",r:"ぎむ",ex:"義務を果たす。",exzh:"盡到義務。"},
+    {en:"rights",jp:"権利",zh:"權利",r:"けんり",ex:"権利を守る。",exzh:"保護權利。"},
+    {en:"loss/damage",jp:"損害",zh:"損害",r:"そんがい",ex:"大きな損害を受けた。",exzh:"遭受很大的損失。"},
+    {en:"profit/benefit",jp:"利益",zh:"利益",r:"りえき",ex:"会社の利益を上げる。",exzh:"提升公司利益。"},
+    {en:"demand/request",jp:"要求",zh:"要求",r:"ようきゅう",ex:"給料の引き上げを要求する。",exzh:"要求加薪。"},
+    {en:"burden/load",jp:"負担",zh:"負擔",r:"ふたん",ex:"仕事の負担が大きい。",exzh:"工作負擔很大。"},
+    {en:"shortage/lack",jp:"不足",zh:"不足",r:"ふそく",ex:"睡眠不足が続く。",exzh:"睡眠不足的狀況持續。"},
+    {en:"surplus/margin",jp:"余裕",zh:"餘裕",r:"よゆう",ex:"時間に余裕がない。",exzh:"時間上沒有餘裕。"},
+    {en:"effort/endeavor",jp:"取り組み",zh:"努力、措施",r:"とりくみ",ex:"環境への取り組みを強化する。",exzh:"強化環保相關措施。"},
+    {en:"attitude/stance",jp:"姿勢",zh:"態度",r:"しせい",ex:"積極的な姿勢を持つ。",exzh:"保持積極的態度。"},
+    {en:"impact/shock",jp:"衝撃",zh:"衝擊",r:"しょうげき",ex:"衝撃的なニュースだった。",exzh:"是個令人震驚的消息。"},
+    {en:"anxiety/unease",jp:"不安",zh:"不安",r:"ふあん",ex:"将来への不安がある。",exzh:"對未來感到不安。"},
+    {en:"trust/confidence",jp:"信頼",zh:"信賴",r:"しんらい",ex:"信頼関係を築く。",exzh:"建立信任關係。"},
+    {en:"prejudice/bias",jp:"偏見",zh:"偏見",r:"へんけん",ex:"偏見を持たない。",exzh:"不抱持偏見。"},
+    {en:"adaptation/adjustment",jp:"適応",zh:"適應",r:"てきおう",ex:"新しい環境に適応する。",exzh:"適應新環境。"},
+    {en:"innovation",jp:"革新",zh:"革新",r:"かくしん",ex:"技術革新が進む。",exzh:"技術革新不斷推進。"},
+    {en:"awareness/perception",jp:"認知",zh:"認知",r:"にんち",ex:"ブランドの認知を高める。",exzh:"提高品牌知名度。"},
+    {en:"diversity",jp:"多様性",zh:"多樣性",r:"たようせい",ex:"多様性を尊重する。",exzh:"尊重多樣性。"},
+    {en:"inequality/gap",jp:"格差",zh:"差距",r:"かくさ",ex:"経済格差が広がる。",exzh:"經濟差距擴大。"},
+    {en:"transparency",jp:"透明性",zh:"透明性",r:"とうめいせい",ex:"透明性のある運営をする。",exzh:"進行透明的營運。"},
+    {en:"sustainability",jp:"持続可能性",zh:"永續性",r:"じぞくかのうせい",ex:"持続可能な社会を目指す。",exzh:"以永續社會為目標。"},
+    {en:"globalization",jp:"グローバル化",zh:"全球化",r:"ぐろーばるか",ex:"グローバル化が進む。",exzh:"全球化不斷推進。"},
+    {en:"digitalization",jp:"デジタル化",zh:"數位化",r:"でじたるか",ex:"業務のデジタル化を進める。",exzh:"推進業務數位化。"},
+    {en:"to emphasize/stress",jp:"強調する",zh:"強調",r:"きょうちょうする",ex:"重要性を強調する。",exzh:"強調其重要性。"},
+    {en:"to clarify/make clear",jp:"明確にする",zh:"明確化",r:"めいかくにする",ex:"目標を明確にする。",exzh:"明確化目標。"},
+    {en:"to implement",jp:"実施する",zh:"實施",r:"じっしする",ex:"計画を実施する。",exzh:"實施計畫。"},
+    {en:"to investigate",jp:"調べる",zh:"調查、研究",r:"しらべる",ex:"原因を調べる。",exzh:"調查原因。"},
+    {en:"to predict/forecast",jp:"予測する",zh:"預測",r:"よそくする",ex:"結果を予測する。",exzh:"預測結果。"},
+    {en:"to establish/set up",jp:"確立する",zh:"確立",r:"かくりつする",ex:"信頼を確立する。",exzh:"確立信任。"},
+    {en:"to be concerned/worried",jp:"懸念する",zh:"擔憂",r:"けねんする",ex:"副作用を懸念する。",exzh:"擔憂副作用。"},
+    {en:"to assume/suppose",jp:"想定する",zh:"假設",r:"そうていする",ex:"最悪の場合を想定する。",exzh:"假設最壞的情況。"},
+    {en:"to respond/cope",jp:"対応する",zh:"應對",r:"たいおうする",ex:"問題に対応する。",exzh:"應對問題。"},
+    {en:"to pursue/seek",jp:"追求する",zh:"追求",r:"ついきゅうする",ex:"真実を追求する。",exzh:"追求真相。"},
+    {en:"to accumulate",jp:"蓄積する",zh:"累積",r:"ちくせきする",ex:"データを蓄積する。",exzh:"累積數據。"},
+    {en:"to reflect/review",jp:"反省する",zh:"反省",r:"はんせいする",ex:"失敗を反省する。",exzh:"反省失敗的原因。"},
+    {en:"to transform/convert",jp:"変換する",zh:"轉換",r:"へんかんする",ex:"エネルギーを変換する。",exzh:"轉換能源。"},
+    {en:"to verify/confirm",jp:"検証する",zh:"驗證",r:"けんしょうする",ex:"仮説を検証する。",exzh:"驗證假說。"},
+    {en:"to overcome",jp:"克服する",zh:"克服",r:"こくふくする",ex:"困難を克服する。",exzh:"克服困難。"},
+    {en:"to contribute",jp:"貢献する",zh:"貢獻",r:"こうけんする",ex:"社会に貢献する。",exzh:"對社會做出貢獻。"},
+    {en:"complicated/tangled",jp:"複雑な",zh:"複雜的",r:"ふくざつな",ex:"複雑な状況だ。",exzh:"是個複雜的狀況。"},
+    {en:"serious/severe",jp:"深刻な",zh:"嚴重的",r:"しんこくな",ex:"深刻な問題がある。",exzh:"有嚴重的問題。"},
+    {en:"significant/remarkable",jp:"著しい",zh:"顯著的",r:"いちじるしい",ex:"著しい成長を遂げた。",exzh:"達到了顯著的成長。"},
+    {en:"urgent",jp:"緊急な",zh:"緊急的",r:"きんきゅうな",ex:"緊急の対応が必要だ。",exzh:"需要緊急應對。"},
+    {en:"appropriate/suitable",jp:"適切な",zh:"適當的",r:"てきせつな",ex:"適切な判断をする。",exzh:"做出適當的判斷。"},
+    {en:"comprehensive",jp:"包括的な",zh:"全面的",r:"ほうかつてきな",ex:"包括的な対策をとる。",exzh:"採取全面性的對策。"},
+    {en:"efficient/effective",jp:"効果的な",zh:"有效的",r:"こうかてきな",ex:"効果的な方法を選ぶ。",exzh:"選擇有效的方法。"},
+    {en:"rational/logical",jp:"合理的な",zh:"合理的",r:"ごうりてきな",ex:"合理的な判断をする。",exzh:"做出合理的判斷。"},
+    {en:"substantial/considerable",jp:"大幅な",zh:"大幅的",r:"おおはばな",ex:"大幅な改善が見られた。",exzh:"可以看到大幅的改善。"},
+    {en:"flexible",jp:"柔軟な",zh:"靈活的",r:"じゅうなんな",ex:"柔軟な対応が求められる。",exzh:"被要求靈活應對。"},
+  ]
+};
+
+const BATCH = 20;
+const STORAGE_KEY = 'flashcard_known_v2';
+
+let lang = 'en';
+let known = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{"en":[],"jp":[]}');
+let deck = [];
+let batchIdx = 0;
+let cardIdx = 0;
+let sessionKnown = 0;
+let sessionAgain = 0;
+let flipped = false;
+let voices = [];
+
+window.speechSynthesis.onvoiceschanged = () => { voices = window.speechSynthesis.getVoices(); };
+setTimeout(() => { voices = window.speechSynthesis.getVoices(); }, 500);
+
+function getVoice(lang) {
+  const map = { en: ['en-US','en-GB','en'], jp: ['ja-JP','ja'] };
+  const prefs = map[lang] || ['en'];
+  for (const p of prefs) {
+    const v = voices.find(v => v.lang.startsWith(p));
+    if (v) return v;
+  }
+  return null;
+}
+
+function speakUtterance(text, langCode) {
+  const u = new SpeechSynthesisUtterance(text);
+  const voiceKey = langCode.startsWith('en') ? 'en' : 'jp';
+  const v = getVoice(voiceKey);
+  if (v) u.voice = v;
+  u.lang = langCode;
+  u.rate = 0.9;
+  return u;
+}
+
+function speak(side) {
+  if (!window.speechSynthesis) return;
+  const w = deck[cardIdx];
+  if (!w) return;
+  window.speechSynthesis.cancel();
+  if (lang === 'en') {
+    window.speechSynthesis.speak(speakUtterance(w.en, 'en-US'));
+  } else {
+    if (side === 'front') {
+      window.speechSynthesis.speak(speakUtterance(w.jp, 'ja-JP'));
+    } else {
+      const uEn = speakUtterance(w.en, 'en-US');
+      const uJp = speakUtterance(w.jp, 'ja-JP');
+      uEn.onend = () => setTimeout(() => window.speechSynthesis.speak(uJp), 300);
+      window.speechSynthesis.speak(uEn);
+    }
+  }
+}
+
+function getUnknown() {
+  return WORDS[lang].filter((_, i) => !known[lang].includes(i));
+}
+
+function setLang(l) {
+  lang = l;
+  document.querySelectorAll('.lang-tab').forEach((t, i) => t.classList.toggle('active', i === (l === 'en' ? 0 : 1)));
+  batchIdx = 0;
+  loadBatch();
+}
+
+function loadBatch() {
+  const unknown = getUnknown();
+  if (unknown.length === 0) { showAllDone(); return; }
+  const start = (batchIdx * BATCH) % unknown.length;
+  deck = unknown.slice(start, start + BATCH);
+  if (deck.length < BATCH && start > 0) deck = unknown.slice(0, BATCH - deck.length).concat(deck);
+  deck = shuffle([...deck]);
+  cardIdx = 0; sessionKnown = 0; sessionAgain = 0; flipped = false;
+  document.getElementById('done-screen').classList.remove('show');
+  document.getElementById('main-area').classList.remove('hidden');
+  updateStats();
+  renderCard();
+}
+
+function shuffle(a) { return a.sort(() => Math.random() - .5); }
+
+function updateStats() {
+  const total = WORDS[lang].length;
+  const knownCount = known[lang].length;
+  document.getElementById('stat-total').textContent = total;
+  document.getElementById('stat-known').textContent = knownCount;
+  document.getElementById('stat-left').textContent = total - knownCount;
+}
+
+function renderCard() {
+  if (cardIdx >= deck.length) { showBatchDone(); return; }
+  const w = deck[cardIdx];
+  const pct = Math.round(cardIdx / deck.length * 100);
+  document.getElementById('prog-fill').style.width = pct + '%';
+  document.getElementById('prog-batch').textContent = '批次 ' + (batchIdx + 1);
+  document.getElementById('prog-count').textContent = (cardIdx + 1) + ' / ' + deck.length;
+
+  const isJp = lang === 'jp';
+  document.getElementById('lang-badge').textContent = isJp ? 'JP' : 'EN';
+  document.getElementById('lang-badge-back').textContent = isJp ? 'JP' : 'EN';
+  document.getElementById('card-num').textContent = cardIdx + 1;
+
+  // Front
+  const fw = document.getElementById('front-word');
+  const fr = document.getElementById('front-reading');
+  const fs = document.getElementById('front-sub');
+  fw.className = isJp ? 'word-jp' : 'word-en';
+  fw.textContent = isJp ? w.jp : w.en;
+  if (isJp && w.r) {
+    fr.style.display = 'block';
+    fr.textContent = w.r;
+  } else {
+    fr.style.display = 'none';
+  }
+  fs.textContent = '';
+
+  // Back
+  const meanings = document.getElementById('back-meanings');
+  meanings.innerHTML = isJp
+    ? `<div class="meaning-row"><span class="meaning-label">中</span><span class="meaning-text serif">${w.zh}</span></div>
+       <div class="meaning-row"><span class="meaning-label">EN</span><span class="meaning-text">${w.en}</span></div>`
+    : `<div class="meaning-row"><span class="meaning-label">中</span><span class="meaning-text serif">${w.zh}</span></div>
+       <div class="meaning-row"><span class="meaning-label">JP</span><span class="meaning-text">${w.jp}${w.r ? ' ('+w.r+')' : ''}</span></div>`;
+  const exWrap = document.getElementById('back-example-wrap');
+  if (w.ex) {
+    exWrap.style.display = 'flex';
+    document.getElementById('back-example').textContent = '"' + w.ex + '"';
+    document.getElementById('back-example-zh').textContent = w.exzh || '';
+  } else {
+    exWrap.style.display = 'none';
+  }
+
+  // Reset flip
+  const card = document.getElementById('card');
+  card.classList.remove('flipped');
+  flipped = false;
+  document.getElementById('action-row').classList.remove('visible');
+
+  // Auto speak front
+  setTimeout(() => speak('front'), 300);
+}
+
+function flipCard() {
+  if (flipped) return;
+  flipped = true;
+  document.getElementById('card').classList.add('flipped');
+  setTimeout(() => {
+    document.getElementById('action-row').classList.add('visible');
+    speak('back');
+  }, 500);
+}
+
+function rate(isKnown) {
+  if (isKnown) {
+    sessionKnown++;
+    const origIdx = WORDS[lang].indexOf(deck[cardIdx]);
+    if (origIdx !== -1 && !known[lang].includes(origIdx)) {
+      known[lang].push(origIdx);
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(known));
+    }
+  } else {
+    sessionAgain++;
+  }
+  cardIdx++;
+  updateStats();
+  renderCard();
+}
+
+function showBatchDone() {
+  document.getElementById('prog-fill').style.width = '100%';
+  document.getElementById('main-area').classList.add('hidden');
+  const ds = document.getElementById('done-screen');
+  ds.classList.add('show');
+  document.getElementById('done-title').textContent = '批次完成！';
+  document.getElementById('done-sub').textContent =
+    `這批 ${deck.length} 個字：認識 ${sessionKnown} 個，需複習 ${sessionAgain} 個。\n總掌握：${known[lang].length} / ${WORDS[lang].length}`;
+  const nb = document.getElementById('next-batch-btn');
+  nb.style.display = getUnknown().length > 0 ? 'block' : 'none';
+}
+
+function showAllDone() {
+  document.getElementById('main-area').classList.add('hidden');
+  const ds = document.getElementById('done-screen');
+  ds.classList.add('show');
+  document.getElementById('done-title').textContent = '全部完成！';
+  document.getElementById('done-sub').textContent = `恭喜！${WORDS[lang].length} 個單字全部掌握了！`;
+  document.getElementById('next-batch-btn').style.display = 'none';
+}
+
+function nextBatch() {
+  batchIdx++;
+  loadBatch();
+}
+
+function reviewAgain() {
+  const agains = deck.filter((_, i) => {
+    const origIdx = WORDS[lang].indexOf(deck[i]);
+    return !known[lang].includes(origIdx);
+  });
+  if (agains.length === 0) { toast('沒有需要複習的！'); return; }
+  deck = shuffle([...agains]);
+  cardIdx = 0; sessionKnown = 0; sessionAgain = 0; flipped = false;
+  document.getElementById('done-screen').classList.remove('show');
+  document.getElementById('main-area').classList.remove('hidden');
+  renderCard();
+}
+
+function resetAll() {
+  if (!confirm('確定要重置所有進度嗎？')) return;
+  known = { en: [], jp: [] };
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(known));
+  batchIdx = 0;
+  toast('進度已重置');
+  loadBatch();
+}
+
+function toast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 2200);
+}
+
+// Init
+loadBatch();
+</script>
+</body>
+</html>
